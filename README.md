@@ -33,3 +33,4 @@ This is a premium Next.js 14 application for **Car Hire Mauritius**, featuring a
 - **Primary Color**: Midnight Navy (#1B2D4F)
 - **Accent Color**: Mauritian Gold (#C9A84C)
 - **Typography**: Playfair Display (Luxury Headers) & Inter (Modern Body)
+# JRCarRental
