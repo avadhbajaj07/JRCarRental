@@ -1,11 +1,11 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Navigation, MapPin, Calendar, Clock, X } from 'lucide-react'
-import Script from 'next/script'
+import { MapPin, Calendar, Clock, Car, Plane, Map, ChevronDown, Check, ArrowRight } from 'lucide-react'
 import { useBookingStore } from '@/src/store/bookingStore'
 import { useGooglePlaces } from '@/src/hooks/useGooglePlaces'
+import Script from 'next/script'
 
 const LOCATIONS = [
   'Sir Seewoosagur Ramgoolam International Airport, Plaine Magnien, Maurice',
@@ -17,31 +17,44 @@ const LOCATIONS = [
   'Tamarin, Mauritius',
 ]
 
-const TIME_OPTIONS = [
-  '00:00','00:30','01:00','01:30','02:00','02:30','03:00','03:30',
-  '04:00','04:30','05:00','05:30','06:00','06:30','07:00','07:30',
-  '08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30',
-  '12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30',
-  '16:00','16:30','17:00','17:30','18:00','18:30','19:00','19:30',
-  '20:00','20:30','21:00','21:30','22:00','22:30','23:00','23:30',
+const VEHICLE_TYPES = [
+  { label: 'Any Vehicle Type', value: '' },
+  { label: 'Automatic Vehicle', value: 'automatic' },
+  { label: 'Manual Vehicle', value: 'manual' },
+  { label: 'Luxury & Sports', value: 'luxury' },
+  { label: 'SUVs & 4x4', value: 'suv' },
+  { label: '7-Seaters & Vans', value: '7-seater' },
+]
+
+const TOURS = [
+  { label: 'Northern Charm Tour (Grand Baie, Botanical Garden)', value: 'north' },
+  { label: 'Wild South Tour (Chamarel, Grand Bassin)', value: 'south' },
+  { label: 'Scenic East Tour (Belle Mare, Ile aux Cerfs)', value: 'east' },
+  { label: 'Sunset West Tour (Flic en Flac, Le Morne)', value: 'west' },
 ]
 
 export default function SearchWidget() {
   const router = useRouter()
   const { setSearchParams, setStep } = useBookingStore()
 
+  // Tab State
+  const [activeTab, setActiveTab] = useState<'car' | 'transfer' | 'tour'>('car')
+
+  // Search Fields
   const [pickup, setPickup] = useState('Sir Seewoosagur Ramgoolam International Airport, Plaine Magnien, Maurice')
   const [dropoff, setDropoff] = useState('Sir Seewoosagur Ramgoolam International Airport, Plaine Magnien, Maurice')
   const [pickupDate, setPickupDate] = useState('2026-06-15')
   const [pickupTime, setPickupTime] = useState('18:30')
   const [returnDate, setReturnDate] = useState('2026-06-25')
   const [returnTime, setReturnTime] = useState('19:00')
-  const [driverAge, setDriverAge] = useState<'18-29' | '30-69' | '70+'>('30-69')
-  const [ageValue, setAgeValue] = useState(24)
+  
+  // Custom dropdown fields
+  const [vehicleType, setVehicleType] = useState('')
+  const [selectedTour, setSelectedTour] = useState('north')
 
+  // Autocomplete Suggestions
   const [showPickupSuggestions, setShowPickupSuggestions] = useState(false)
   const [showDropoffSuggestions, setShowDropoffSuggestions] = useState(false)
-
   const { fetchPredictions, initService } = useGooglePlaces()
   const [pickupPredictions, setPickupPredictions] = useState<{description: string}[]>([])
   const [dropoffPredictions, setDropoffPredictions] = useState<{description: string}[]>([])
@@ -61,14 +74,29 @@ export default function SearchWidget() {
   const handleSearch = () => {
     setSearchParams({
       pickupLocation: pickup,
-      dropoffLocation: dropoff,
+      dropoffLocation: activeTab === 'transfer' ? dropoff : pickup,
       pickupDate,
       pickupTime,
       dropoffDate: returnDate,
       dropoffTime: returnTime,
     })
     setStep(1)
-    router.push('/booking')
+
+    // Append filter query parameters
+    let query = ''
+    if (activeTab === 'car' && vehicleType) {
+      if (vehicleType === 'automatic' || vehicleType === 'manual') {
+        query = `?transmission=${vehicleType === 'automatic' ? 'Automatic' : 'Manual'}`
+      } else {
+        query = `?category=${vehicleType}`
+      }
+    } else if (activeTab === 'transfer') {
+      query = '?type=transfers'
+    } else if (activeTab === 'tour') {
+      query = `?type=tours&tour=${selectedTour}`
+    }
+
+    router.push(`/booking${query}`)
   }
 
   return (
@@ -78,251 +106,258 @@ export default function SearchWidget() {
         onLoad={initService}
         strategy="lazyOnload"
       />
-      <div className="bg-white rounded-2xl shadow-md px-6 sm:px-8 py-7 max-w-[960px] mx-auto">
-      {/* Row 1 — Address Inputs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-5">
-        {/* Pickup Address */}
-        <div className="relative">
-          <label className="flex items-center gap-2 mb-2">
-            <Navigation size={16} className="text-[#0D9B84]" />
-            <span className="font-bold text-sm text-[#1A4D5C]">Pickup address</span>
-            <span className="text-xs text-gray-400">(Choose airport or hotel)</span>
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              value={pickup}
-              onChange={(e) => handlePickupChange(e.target.value)}
-              onFocus={() => setShowPickupSuggestions(true)}
-              onBlur={() => setTimeout(() => setShowPickupSuggestions(false), 200)}
-              placeholder="Google Maps Autocomplete..."
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 pr-10 text-sm font-bold text-gray-800 focus:border-[#4285F4] focus:ring-1 focus:ring-[#4285F4] transition-colors"
-            />
-            {pickup && (
+
+      <div className="w-full max-w-[420px] bg-white/95 backdrop-blur-xl border border-white/20 shadow-luxury rounded-[24px] overflow-hidden flex flex-col p-6 text-navy">
+        
+        {/* Tabs Row */}
+        <div className="flex border-b border-lightGray/80 pb-4 mb-5 justify-between">
+          {[
+            { id: 'car', label: 'Car Rental', icon: Car },
+            { id: 'transfer', label: 'Airport Transfer', icon: Plane },
+            { id: 'tour', label: 'Tours', icon: Map },
+          ].map((tab) => {
+            const Icon = tab.icon
+            const isActive = activeTab === tab.id
+            return (
               <button
-                onClick={() => setPickup('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors"
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex flex-col items-center gap-1.5 flex-1 py-1.5 text-center transition-all duration-300 relative ${
+                  isActive ? 'text-teal font-extrabold' : 'text-navy/55 hover:text-navy font-bold'
+                }`}
               >
-                <X size={12} className="text-gray-500" />
+                <Icon size={18} className={isActive ? 'text-teal' : 'text-navy/50'} />
+                <span className="text-[11px] uppercase tracking-wider whitespace-nowrap">{tab.label}</span>
+                {isActive && (
+                  <span className="absolute bottom-[-17px] left-0 right-0 h-[3px] bg-teal rounded-t-full" />
+                )}
               </button>
-            )}
-            {showPickupSuggestions && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
-                {pickupPredictions.length > 0 ? pickupPredictions.map((pred, i) => (
-                  <button
-                    key={i}
-                    onClick={() => { setPickup(pred.description); setShowPickupSuggestions(false) }}
-                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#E1F5EE] transition-colors flex items-center gap-2"
-                  >
-                    <MapPin size={12} className="text-[#0D9B84] flex-shrink-0" />
-                    {pred.description}
-                  </button>
-                )) : LOCATIONS.slice(0, 4).map((loc, i) => (
-                  <button
-                    key={i}
-                    onClick={() => { setPickup(loc); setShowPickupSuggestions(false) }}
-                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#E1F5EE] transition-colors flex items-center gap-2"
-                  >
-                    <MapPin size={12} className="text-[#0D9B84] flex-shrink-0" />
-                    {loc}
-                  </button>
-                ))}
-                {/* Google UI Branding */}
-                <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex justify-end">
-                   <div className="flex items-center gap-1 opacity-50">
-                      <span className="text-[10px] text-gray-500 font-bold">Powered by</span>
-                      <span className="text-[10px] font-black text-[#4285F4]">G</span>
-                      <span className="text-[10px] font-black text-[#EA4335]">o</span>
-                      <span className="text-[10px] font-black text-[#FBBC05]">o</span>
-                      <span className="text-[10px] font-black text-[#4285F4]">g</span>
-                      <span className="text-[10px] font-black text-[#34A853]">l</span>
-                      <span className="text-[10px] font-black text-[#EA4335]">e</span>
-                   </div>
-                </div>
-              </div>
-            )}
-          </div>
+            )
+          })}
         </div>
 
-        {/* Drop-off Address */}
-        <div className="relative">
-          <label className="flex items-center gap-2 mb-2">
-            <MapPin size={16} className="text-[#E8534A]" />
-            <span className="font-bold text-sm text-[#1A4D5C]">Drop-off address</span>
-            <span className="text-xs text-gray-400">(Choose airport or hotel)</span>
-          </label>
+        {/* Tab content inputs */}
+        <div className="space-y-4 flex-1">
+          {/* Pickup Address */}
           <div className="relative">
-            <input
-              type="text"
-              value={dropoff}
-              onChange={(e) => handleDropoffChange(e.target.value)}
-              onFocus={() => setShowDropoffSuggestions(true)}
-              onBlur={() => setTimeout(() => setShowDropoffSuggestions(false), 200)}
-              placeholder="Google Maps Autocomplete..."
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 pr-10 text-sm font-bold text-gray-800 focus:border-[#4285F4] focus:ring-1 focus:ring-[#4285F4] transition-colors"
-            />
-            {dropoff && (
-              <button
-                onClick={() => setDropoff('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors"
-              >
-                <X size={12} className="text-gray-500" />
-              </button>
-            )}
-            {showDropoffSuggestions && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
-                {dropoffPredictions.length > 0 ? dropoffPredictions.map((pred, i) => (
-                  <button
-                    key={i}
-                    onClick={() => { setDropoff(pred.description); setShowDropoffSuggestions(false) }}
-                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#FEE9E7] transition-colors flex items-center gap-2"
-                  >
-                    <MapPin size={12} className="text-[#E8534A] flex-shrink-0" />
-                    {pred.description}
-                  </button>
-                )) : LOCATIONS.slice(0, 4).map((loc, i) => (
-                  <button
-                    key={i}
-                    onClick={() => { setDropoff(loc); setShowDropoffSuggestions(false) }}
-                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#FEE9E7] transition-colors flex items-center gap-2"
-                  >
-                    <MapPin size={12} className="text-[#E8534A] flex-shrink-0" />
-                    {loc}
-                  </button>
-                ))}
-                {/* Google UI Branding */}
-                <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex justify-end">
-                   <div className="flex items-center gap-1 opacity-50">
-                      <span className="text-[10px] text-gray-500 font-bold">Powered by</span>
-                      <span className="text-[10px] font-black text-[#4285F4]">G</span>
-                      <span className="text-[10px] font-black text-[#EA4335]">o</span>
-                      <span className="text-[10px] font-black text-[#FBBC05]">o</span>
-                      <span className="text-[10px] font-black text-[#4285F4]">g</span>
-                      <span className="text-[10px] font-black text-[#34A853]">l</span>
-                      <span className="text-[10px] font-black text-[#EA4335]">e</span>
-                   </div>
+            <label className="block text-[11px] font-black uppercase tracking-wider text-navy/40 mb-1.5 flex items-center gap-1.5">
+              <MapPin size={12} className="text-teal" />
+              <span>Pickup Location</span>
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={pickup}
+                onChange={(e) => handlePickupChange(e.target.value)}
+                onFocus={() => setShowPickupSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowPickupSuggestions(false), 200)}
+                placeholder="Airport, Hotel, or Town..."
+                className="w-full bg-lightGray/50 border border-lightGray hover:border-teal/30 focus:border-teal rounded-[14px] px-4 py-3 text-xs font-bold text-navy transition-all"
+              />
+              {showPickupSuggestions && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-lightGray rounded-[14px] shadow-lg z-50 max-h-48 overflow-y-auto">
+                  {pickupPredictions.length > 0 ? pickupPredictions.map((pred, i) => (
+                    <button
+                      key={i}
+                      onClick={() => { setPickup(pred.description); setShowPickupSuggestions(false) }}
+                      className="w-full text-left px-4 py-2.5 text-xs text-navy/80 hover:bg-teal/10 hover:text-teal font-bold transition-colors flex items-center gap-2"
+                    >
+                      <MapPin size={10} className="text-teal flex-shrink-0" />
+                      {pred.description}
+                    </button>
+                  )) : LOCATIONS.map((loc, i) => (
+                    <button
+                      key={i}
+                      onClick={() => { setPickup(loc); setShowPickupSuggestions(false) }}
+                      className="w-full text-left px-4 py-2.5 text-xs text-navy/80 hover:bg-teal/10 hover:text-teal font-bold transition-colors flex items-center gap-2"
+                    >
+                      <MapPin size={10} className="text-teal flex-shrink-0" />
+                      {loc}
+                    </button>
+                  ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Row 2 — Date & Time */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-5">
-        {/* Pickup Date */}
-        <div>
-          <label className="flex items-center gap-1.5 mb-2">
-            <Calendar size={14} className="text-[#0D9B84]" />
-            <span className="font-bold text-sm text-[#1A4D5C]">Pickup Date</span>
-          </label>
-          <input
-            type="date"
-            value={pickupDate}
-            onChange={(e) => setPickupDate(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-800 focus:border-[#0D9B84] focus:ring-1 focus:ring-[#0D9B84] transition-colors"
-          />
-        </div>
-
-        {/* Pickup Time */}
-        <div>
-          <label className="flex items-center gap-1.5 mb-2">
-            <Clock size={14} className="text-[#0D9B84]" />
-            <span className="font-bold text-sm text-[#1A4D5C]">Pickup Time</span>
-          </label>
-          <select
-            value={pickupTime}
-            onChange={(e) => setPickupTime(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-800 focus:border-[#0D9B84] focus:ring-1 focus:ring-[#0D9B84] transition-colors appearance-none bg-white cursor-pointer"
-          >
-            {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-
-        {/* Return Date */}
-        <div>
-          <label className="flex items-center gap-1.5 mb-2">
-            <Calendar size={14} className="text-[#E8534A]" />
-            <span className="font-bold text-sm text-[#1A4D5C]">Return Date</span>
-          </label>
-          <input
-            type="date"
-            value={returnDate}
-            onChange={(e) => setReturnDate(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-800 focus:border-[#E8534A] focus:ring-1 focus:ring-[#E8534A] transition-colors"
-          />
-        </div>
-
-        {/* Return Time */}
-        <div>
-          <label className="flex items-center gap-1.5 mb-2">
-            <Clock size={14} className="text-[#E8534A]" />
-            <span className="font-bold text-sm text-[#1A4D5C]">Return Time</span>
-          </label>
-          <select
-            value={returnTime}
-            onChange={(e) => setReturnTime(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-800 focus:border-[#E8534A] focus:ring-1 focus:ring-[#E8534A] transition-colors appearance-none bg-white cursor-pointer"
-          >
-            {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-      </div>
-
-      {/* Row 3 — Driver age + Age number + Payment logos + CTA */}
-      <div className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6">
-        {/* Driver Age Radio */}
-        <div className="flex items-center gap-4">
-          <span className="font-bold text-sm text-[#1A4D5C]">Driver&apos;s age</span>
-          <div className="flex items-center gap-4">
-            {(['18-29', '30-69', '70+'] as const).map(age => (
-              <label key={age} onClick={() => setDriverAge(age)} className="flex items-center gap-1.5 cursor-pointer">
-                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
-                  driverAge === age ? 'border-[#0D9B84]' : 'border-gray-300'
-                }`}>
-                  {driverAge === age && <div className="w-2 h-2 rounded-full bg-[#0D9B84]" />}
-                </div>
-                <span className="text-sm text-gray-600">{age}</span>
+          {/* Drop-off Address (Only visible in Airport Transfer) */}
+          {activeTab === 'transfer' && (
+            <div className="relative animate-[fadeIn_0.3s_ease-out]">
+              <label className="block text-[11px] font-black uppercase tracking-wider text-navy/40 mb-1.5 flex items-center gap-1.5">
+                <MapPin size={12} className="text-rose-500" />
+                <span>Drop-off Destination</span>
               </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Age Number Input */}
-        <input
-          type="number"
-          value={ageValue}
-          onChange={(e) => setAgeValue(Number(e.target.value))}
-          className="w-20 border border-gray-300 rounded-lg px-3 py-3 text-center text-sm font-medium text-gray-800 focus:border-[#0D9B84] focus:ring-1 focus:ring-[#0D9B84] transition-colors"
-        />
-
-        {/* Payment Logos */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            {/* Visa */}
-            <div className="bg-[#1A1F71] text-white text-[9px] font-black px-2.5 py-1.5 rounded italic tracking-wide">
-              VISA
+              <div className="relative">
+                <input
+                  type="text"
+                  value={dropoff}
+                  onChange={(e) => handleDropoffChange(e.target.value)}
+                  onFocus={() => setShowDropoffSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowDropoffSuggestions(false), 200)}
+                  placeholder="Hotel or Airport..."
+                  className="w-full bg-lightGray/50 border border-lightGray hover:border-teal/30 focus:border-teal rounded-[14px] px-4 py-3 text-xs font-bold text-navy transition-all"
+                />
+                {showDropoffSuggestions && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-lightGray rounded-[14px] shadow-lg z-50 max-h-48 overflow-y-auto">
+                    {dropoffPredictions.length > 0 ? dropoffPredictions.map((pred, i) => (
+                      <button
+                        key={i}
+                        onClick={() => { setDropoff(pred.description); setShowDropoffSuggestions(false) }}
+                        className="w-full text-left px-4 py-2.5 text-xs text-navy/80 hover:bg-teal/10 hover:text-teal font-bold transition-colors flex items-center gap-2"
+                      >
+                        <MapPin size={10} className="text-rose-500 flex-shrink-0" />
+                        {pred.description}
+                      </button>
+                    )) : LOCATIONS.map((loc, i) => (
+                      <button
+                        key={i}
+                        onClick={() => { setDropoff(loc); setShowDropoffSuggestions(false) }}
+                        className="w-full text-left px-4 py-2.5 text-xs text-navy/80 hover:bg-teal/10 hover:text-teal font-bold transition-colors flex items-center gap-2"
+                      >
+                        <MapPin size={10} className="text-rose-500 flex-shrink-0" />
+                        {loc}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-            {/* Mastercard */}
-            <div className="flex items-center -space-x-1.5">
-              <div className="w-5 h-5 rounded-full bg-[#EB001B]" />
-              <div className="w-5 h-5 rounded-full bg-[#F79E1B] opacity-80" />
+          )}
+
+          {/* Dates Row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-black uppercase tracking-wider text-navy/40 mb-1.5 flex items-center gap-1.5">
+                <Calendar size={12} className="text-teal" />
+                <span>{activeTab === 'tour' ? 'Tour Date' : 'Pickup Date'}</span>
+              </label>
+              <input
+                type="date"
+                value={pickupDate}
+                onChange={(e) => setPickupDate(e.target.value)}
+                className="w-full bg-lightGray/50 border border-lightGray hover:border-teal/30 focus:border-teal rounded-[14px] px-3 py-3 text-xs font-bold text-navy transition-all"
+              />
             </div>
+
+            {activeTab !== 'tour' ? (
+              <div>
+                <label className="block text-[11px] font-black uppercase tracking-wider text-navy/40 mb-1.5 flex items-center gap-1.5">
+                  <Calendar size={12} className="text-rose-500" />
+                  <span>Return Date</span>
+                </label>
+                <input
+                  type="date"
+                  value={returnDate}
+                  onChange={(e) => setReturnDate(e.target.value)}
+                  className="w-full bg-lightGray/50 border border-lightGray hover:border-teal/30 focus:border-teal rounded-[14px] px-3 py-3 text-xs font-bold text-navy transition-all"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-[11px] font-black uppercase tracking-wider text-navy/40 mb-1.5 flex items-center gap-1.5">
+                  <Clock size={12} className="text-teal" />
+                  <span>Pickup Time</span>
+                </label>
+                <input
+                  type="time"
+                  value={pickupTime}
+                  onChange={(e) => setPickupTime(e.target.value)}
+                  className="w-full bg-lightGray/50 border border-lightGray hover:border-teal/30 focus:border-teal rounded-[14px] px-3 py-3 text-xs font-bold text-navy transition-all"
+                />
+              </div>
+            )}
           </div>
-          <span className="text-xs font-bold text-[#0D9B84] uppercase tracking-wide leading-tight">
-            Debit &<br />Credit
-          </span>
+
+          {/* Times Row for Car Rental and Transfer */}
+          {activeTab !== 'tour' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-black uppercase tracking-wider text-navy/40 mb-1.5 flex items-center gap-1.5">
+                  <Clock size={12} className="text-teal" />
+                  <span>Pickup Time</span>
+                </label>
+                <input
+                  type="time"
+                  value={pickupTime}
+                  onChange={(e) => setPickupTime(e.target.value)}
+                  className="w-full bg-lightGray/50 border border-lightGray hover:border-teal/30 focus:border-teal rounded-[14px] px-3 py-3 text-xs font-bold text-navy transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-black uppercase tracking-wider text-navy/40 mb-1.5 flex items-center gap-1.5">
+                  <Clock size={12} className="text-rose-500" />
+                  <span>Return Time</span>
+                </label>
+                <input
+                  type="time"
+                  value={returnTime}
+                  onChange={(e) => setReturnTime(e.target.value)}
+                  className="w-full bg-lightGray/50 border border-lightGray hover:border-teal/30 focus:border-teal rounded-[14px] px-3 py-3 text-xs font-bold text-navy transition-all"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Dropdown Options */}
+          {activeTab === 'car' && (
+            <div>
+              <label className="block text-[11px] font-black uppercase tracking-wider text-navy/40 mb-1.5">
+                Vehicle Type
+              </label>
+              <div className="relative">
+                <select
+                  value={vehicleType}
+                  onChange={(e) => setVehicleType(e.target.value)}
+                  className="w-full bg-lightGray/50 border border-lightGray hover:border-teal/30 focus:border-teal rounded-[14px] px-4 py-3 text-xs font-bold text-navy appearance-none pr-10 cursor-pointer"
+                >
+                  {VEHICLE_TYPES.map((vt) => (
+                    <option key={vt.value} value={vt.value}>
+                      {vt.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-navy/40">
+                  <ChevronDown size={14} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'tour' && (
+            <div>
+              <label className="block text-[11px] font-black uppercase tracking-wider text-navy/40 mb-1.5">
+                Select Island Tour
+              </label>
+              <div className="relative">
+                <select
+                  value={selectedTour}
+                  onChange={(e) => setSelectedTour(e.target.value)}
+                  className="w-full bg-lightGray/50 border border-lightGray hover:border-teal/30 focus:border-teal rounded-[14px] px-4 py-3 text-xs font-bold text-navy appearance-none pr-10 cursor-pointer"
+                >
+                  {TOURS.map((tour) => (
+                    <option key={tour.value} value={tour.value}>
+                      {tour.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-navy/40">
+                  <ChevronDown size={14} />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* CTA Button */}
         <button
           onClick={handleSearch}
-          className="ml-auto w-full md:w-auto px-8 lg:px-10 py-3.5 bg-[#0D9B84] text-white font-medium text-base rounded-xl hover:bg-[#00C4A0] transition-all duration-300 shadow-lg shadow-[#0D9B84]/20 hover:shadow-xl hover:shadow-[#0D9B84]/30 whitespace-nowrap"
+          className="mt-6 w-full h-[52px] bg-teal hover:bg-teal-light text-white font-black uppercase tracking-widest text-[13px] rounded-[16px] flex items-center justify-center gap-2 transition-all duration-300 hover:shadow-[0_8px_30px_rgba(0,207,197,0.4)] active:scale-[0.98]"
         >
-          Search My Car Now
+          <span>Find Availability</span>
+          <ArrowRight size={16} />
         </button>
+
       </div>
-    </div>
     </>
   )
 }
